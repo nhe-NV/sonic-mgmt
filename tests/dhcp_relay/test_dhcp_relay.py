@@ -6,6 +6,7 @@ import time
 from tests.common.fixtures.ptfhost_utils import copy_ptftests_directory   # lgtm[py/unused-import]
 from tests.common.fixtures.ptfhost_utils import change_mac_addresses      # lgtm[py/unused-import]
 from tests.ptf_runner import ptf_runner
+from tests.common.utilities import wait_until
 
 pytestmark = [
     pytest.mark.topology('t0'),
@@ -167,6 +168,21 @@ def testing_config(request, duthosts, rand_one_dut_hostname):
         restart_dhcp_service(duthost)
 
 
+def _check_link_status(duthost, iface_list, expect_status):
+    """
+    check if the link status specified in the iface_list equal to expect status
+    :param duthost: dut host object
+    :param iface_list: the interface list
+    :param expect_status: expected status for the interface specified in the iface_list
+    :return: True if the status of all the interfaces specified in the iface_list equal to expect status, else False
+    """
+    int_status = duthost.show_interface(command="status")['ansible_facts']['int_status']
+    for intf in iface_list:
+        if int_status[intf]['admin_state'] == 'up' and int_status[intf]['oper_state'] != expect_status:
+            return False
+    return True
+
+
 def test_dhcp_relay_default(ptfhost, dut_dhcp_relay_data, validate_dut_routes_exist, testing_config):
     """Test DHCP relay functionality on T0 topology.
 
@@ -209,15 +225,14 @@ def test_dhcp_relay_after_link_flap(ptfhost, dut_dhcp_relay_data, validate_dut_r
         for iface in dhcp_relay['uplink_interfaces']:
             duthost.shell('ifconfig {} down'.format(iface))
 
-        # Sleep a bit to ensure uplinks are down
-        time.sleep(20)
-
+        assert (wait_until(50, 10, _check_link_status, duthost, dhcp_relay['uplink_interfaces'], "down"),
+                "Not all uplinks go down")
         # Bring all uplink interfaces back up
         for iface in dhcp_relay['uplink_interfaces']:
             duthost.shell('ifconfig {} up'.format(iface))
 
-        # Sleep a bit to ensure uplinks are up
-        time.sleep(20)
+        assert (wait_until(50, 10, _check_link_status, duthost, dhcp_relay['uplink_interfaces'], "up"),
+                "Not all uplinks are up")
 
         # Run the DHCP relay test on the PTF host
         ptf_runner(ptfhost,
@@ -254,8 +269,8 @@ def test_dhcp_relay_start_with_uplinks_down(ptfhost, dut_dhcp_relay_data, valida
         for iface in dhcp_relay['uplink_interfaces']:
             duthost.shell('ifconfig {} down'.format(iface))
 
-        # Sleep a bit to ensure uplinks are down
-        time.sleep(20)
+        assert (wait_until(50, 10, _check_link_status, duthost, dhcp_relay['uplink_interfaces'], "down"),
+                "Not all uplinks go down")
 
         # Restart DHCP relay service on DUT
         duthost.shell('systemctl restart dhcp_relay.service')
@@ -268,8 +283,8 @@ def test_dhcp_relay_start_with_uplinks_down(ptfhost, dut_dhcp_relay_data, valida
         for iface in dhcp_relay['uplink_interfaces']:
             duthost.shell('ifconfig {} up'.format(iface))
 
-        # Sleep a bit to ensure uplinks are up
-        time.sleep(20)
+        assert (wait_until(50, 10, _check_link_status, duthost, dhcp_relay['uplink_interfaces'], "up"),
+                "Not all uplinks are up")
 
         # Run the DHCP relay test on the PTF host
         ptf_runner(ptfhost,
