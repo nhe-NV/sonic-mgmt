@@ -32,7 +32,6 @@ def _backup_and_restore_config_db(duts, scope='function'):
     for duthost in duthosts:
         logger.info("Backup {} to {} on {}".format(CONFIG_DB, CONFIG_DB_BAK, duthost.hostname))
         duthost.shell("cp {} {}".format(CONFIG_DB, CONFIG_DB_BAK))
-
     yield
 
     for duthost in duthosts:
